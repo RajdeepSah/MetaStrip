@@ -1,86 +1,118 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-type BackendStatus = "checking" | "online" | "offline";
+import { useCallback, useReducer } from "react";
+import { UploadZone } from "./components/UploadZone";
+import { FindingsPanel } from "./components/FindingsPanel";
+import { AuditResponse } from "./lib/types";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5000";
 
+type State =
+  | { phase: "idle" }
+  | { phase: "uploading" }
+  | { phase: "results"; data: AuditResponse }
+  | { phase: "error"; message: string };
+
+type Action =
+  | { type: "UPLOAD_START" }
+  | { type: "UPLOAD_SUCCESS"; data: AuditResponse }
+  | { type: "UPLOAD_ERROR"; message: string }
+  | { type: "RESET" };
+
+function reducer(_: State, action: Action): State {
+  switch (action.type) {
+    case "UPLOAD_START":   return { phase: "uploading" };
+    case "UPLOAD_SUCCESS": return { phase: "results", data: action.data };
+    case "UPLOAD_ERROR":   return { phase: "error", message: action.message };
+    case "RESET":          return { phase: "idle" };
+  }
+}
+
 export default function Home() {
-  const [status, setStatus] = useState<BackendStatus>("checking");
+  const [state, dispatch] = useReducer(reducer, { phase: "idle" });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+  const handleUpload = useCallback(async (file: File) => {
+    dispatch({ type: "UPLOAD_START" });
+    const form = new FormData();
+    form.append("file", file);
 
-    fetch(`${BACKEND_URL}/api/health`, { signal: controller.signal })
-      .then((res) => res.json())
-      .then((data: { status: string }) => {
-        setStatus(data.status === "ok" ? "online" : "offline");
-      })
-      .catch(() => setStatus("offline"))
-      .finally(() => clearTimeout(timeout));
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/audit`, {
+        method: "POST",
+        body: form,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        dispatch({
+          type: "UPLOAD_ERROR",
+          message: (json as { error?: string }).error ?? `HTTP ${res.status}`,
+        });
+        return;
+      }
+      dispatch({ type: "UPLOAD_SUCCESS", data: json as AuditResponse });
+    } catch {
+      dispatch({
+        type: "UPLOAD_ERROR",
+        message: "Network error — is the backend running?",
+      });
+    }
   }, []);
 
-  const statusColor =
-    status === "online"
-      ? "text-risk-green"
-      : status === "offline"
-        ? "text-risk-red"
-        : "text-risk-amber";
-
-  const statusDot =
-    status === "online"
-      ? "bg-risk-green"
-      : status === "offline"
-        ? "bg-risk-red"
-        : "bg-risk-amber animate-pulse";
+  const handleReset = useCallback(() => dispatch({ type: "RESET" }), []);
 
   return (
-    <main className="min-h-screen bg-grid flex flex-col items-center justify-center px-4">
-      {/* Header */}
-      <div className="text-center mb-16">
-        <p className="font-mono text-cyan-dim text-sm tracking-[0.3em] uppercase mb-3">
-          Metadata Exposure Audit
-        </p>
+    <main className="min-h-screen bg-grid px-4 py-12">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-10">
+          <p className="font-mono text-cyan-dim text-xs tracking-[0.3em] uppercase mb-3">
+            Metadata Exposure Audit
+          </p>
+          <h1 className="font-mono text-5xl font-semibold text-cyan-primary text-cyan-glow mb-3 tracking-tight">
+            MetaStrip
+          </h1>
+          <p className="text-text-muted text-sm max-w-sm mx-auto leading-relaxed">
+            Upload a file. See exactly what it reveals about you.
+            Download it clean.
+          </p>
+        </div>
 
-        <h1 className="font-mono text-6xl font-semibold text-cyan-primary text-cyan-glow mb-4 tracking-tight">
-          MetaStrip
-        </h1>
+        {/* Content */}
+        {state.phase === "idle" && (
+          <UploadZone onUpload={handleUpload} disabled={false} />
+        )}
 
-        <p className="text-text-muted text-lg max-w-md mx-auto leading-relaxed">
-          Upload a file. See exactly what it reveals about you.
-          <br />
-          Download it clean.
-        </p>
-      </div>
+        {state.phase === "uploading" && (
+          <UploadZone onUpload={handleUpload} disabled={true} />
+        )}
 
-      {/* Backend status indicator */}
-      <div className="border border-border-dim bg-surface rounded-lg px-6 py-4 flex items-center gap-3 font-mono text-sm">
-        <div className={`w-2 h-2 rounded-full ${statusDot}`} />
-        <span className="text-text-muted">Backend API</span>
-        <span className="text-border-bright">·</span>
-        <span className={statusColor}>
-          {status === "checking" ? "connecting..." : status}
-        </span>
-        {status === "online" && (
-          <span className="text-text-dim ml-1">
-            {BACKEND_URL.replace("http://", "")}
-          </span>
+        {state.phase === "error" && (
+          <div className="space-y-4">
+            <div className="border border-risk-red/30 bg-surface rounded-xl p-6 text-center">
+              <p className="font-mono text-risk-red text-sm mb-1">
+                Analysis failed
+              </p>
+              <p className="font-mono text-text-muted text-xs">
+                {state.message}
+              </p>
+            </div>
+            <button
+              onClick={handleReset}
+              className="w-full font-mono text-sm text-text-muted hover:text-text-primary transition-colors py-2"
+            >
+              ← Try again
+            </button>
+          </div>
+        )}
+
+        {state.phase === "results" && (
+          <FindingsPanel data={state.data} onReset={handleReset} />
         )}
       </div>
 
-      {/* Phase placeholder */}
-      <div className="mt-16 border border-border-dim border-dashed rounded-lg px-12 py-8 text-center">
-        <p className="font-mono text-text-muted text-sm">
-          // upload zone — Phase 2
-        </p>
-      </div>
-
-      {/* Footer */}
-      <footer className="absolute bottom-6 font-mono text-text-dim text-xs">
-        v0.1-scaffold · Phase 1 complete
+      <footer className="text-center mt-16 font-mono text-text-dim text-xs">
+        v0.5 · Phase 5 complete
       </footer>
     </main>
   );
