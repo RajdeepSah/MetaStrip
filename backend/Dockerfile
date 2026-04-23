@@ -16,4 +16,5 @@ COPY . .
 EXPOSE 5000
 
 # --reload watches for code changes when the source is volume-mounted
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--reload", "wsgi:app"]
+# Single worker keeps the in-memory TTL cache consistent across requests
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--reload", "wsgi:app"]
