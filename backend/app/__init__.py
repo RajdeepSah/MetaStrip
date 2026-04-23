@@ -11,6 +11,12 @@ def create_app(config_class: type = Config) -> Flask:
 
     CORS(app, origins=app.config["CORS_ORIGINS"])
 
+    from .utils.cache import init_cache
+    init_cache(
+        maxsize=app.config["CACHE_MAX_SIZE"],
+        ttl=app.config["CACHE_TTL_SECONDS"],
+    )
+
     from .routes import bp as api_bp
 
     app.register_blueprint(api_bp, url_prefix="/api")

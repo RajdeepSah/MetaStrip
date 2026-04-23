@@ -1,16 +1,20 @@
 """In-memory TTL cache for cleaned files.
 
-Keyed by UUID string. Each entry holds the raw bytes of a stripped file.
-Entries expire automatically after CACHE_TTL_SECONDS (default 15 min).
+Each entry is a dict:
+    {"bytes": bytes, "mime_type": str, "filename": str}
 
-Note: this is a single-process cache. Run gunicorn with --workers 1
-(the default in docker-compose) so all requests share the same store.
+Entries expire automatically after CACHE_TTL_SECONDS (default 15 min).
+Keyed by UUID string assigned at strip time.
+
+Note: single-process cache — run gunicorn with --workers 1 (the default
+in docker-compose) so all requests share the same store.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from cachetools import TTLCache
 
-# Populated lazily via init_cache() so the app config drives the settings.
 _store: TTLCache | None = None
 
 
@@ -19,14 +23,14 @@ def init_cache(maxsize: int = 100, ttl: int = 900) -> None:
     _store = TTLCache(maxsize=maxsize, ttl=ttl)
 
 
-def put(key: str, value: bytes) -> None:
+def put(key: str, value: Any) -> None:
     if _store is None:
         init_cache()
     assert _store is not None
     _store[key] = value
 
 
-def get(key: str) -> bytes | None:
+def get(key: str) -> Any | None:
     if _store is None:
         return None
     return _store.get(key)
