@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend:
     build: ./backend
@@ -14,11 +12,12 @@ services:
       - SECRET_KEY=dev-only-change-in-prod
       - CORS_ORIGINS=http://localhost:3000
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      # python:3.11-slim has no curl; use python instead
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 15s
+      retries: 5
+      start_period: 20s
 
   frontend:
     build: ./frontend
