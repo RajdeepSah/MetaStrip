@@ -1,7 +1,8 @@
 """Programmatic test fixtures — no external files needed.
 
-All fixture images are generated in memory using Pillow + piexif so
-the test suite is fully self-contained.
+All fixtures are generated in memory (Pillow+piexif for images,
+pypdf for PDFs, python-docx+lxml for DOCX) so the suite is fully
+self-contained.
 """
 from __future__ import annotations
 
@@ -101,3 +102,83 @@ def png_with_text() -> bytes:
 def corrupt_bytes() -> bytes:
     """Bytes that start like a JPEG but are otherwise garbage."""
     return b"\xff\xd8\xff\xe0" + b"\x00" * 16 + b"not valid jpeg content at all"
+
+
+# ── PDF fixtures ──────────────────────────────────────────────────────────────
+
+@pytest.fixture(scope="session")
+def pdf_with_metadata() -> bytes:
+    """Single-page PDF with /Author, /Creator, /Title, and /CreationDate set."""
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    writer.add_metadata({
+        "/Author": "Alice Example",
+        "/Creator": "Microsoft Word 16.0",
+        "/Title": "Confidential Report",
+        "/Subject": "Test fixture",
+        "/Keywords": "test metadata fixture",
+        "/CreationDate": "D:20240315120000+00'00'",
+        "/ModDate": "D:20240315130000+00'00'",
+    })
+    buf = BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
+
+
+@pytest.fixture(scope="session")
+def pdf_no_metadata() -> bytes:
+    """Single-page PDF with no /Info dictionary."""
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    buf = BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
+
+
+# ── DOCX fixtures ─────────────────────────────────────────────────────────────
+
+@pytest.fixture(scope="session")
+def docx_with_metadata() -> bytes:
+    """DOCX with core properties set and one tracked insertion injected via lxml."""
+    from docx import Document
+    from lxml import etree
+
+    doc = Document()
+    props = doc.core_properties
+    props.author = "Bob Builder"
+    props.last_modified_by = "Carol Editor"
+    props.title = "Project Proposal"
+    props.subject = "Testing"
+    props.revision = 5
+
+    # Add content so paragraphs[0] exists, then inject a tracked insertion
+    doc.add_paragraph("Base content.")
+    _W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    W = f"{{{_W_NS}}}"
+    para = doc.paragraphs[0]._element
+    ins = etree.SubElement(para, f"{W}ins")
+    ins.set(f"{W}id", "1")
+    ins.set(f"{W}author", "Bob Builder")
+    ins.set(f"{W}date", "2024-03-15T12:00:00Z")
+    run = etree.SubElement(ins, f"{W}r")
+    t = etree.SubElement(run, f"{W}t")
+    t.text = "tracked inserted text"
+
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+@pytest.fixture(scope="session")
+def docx_no_metadata() -> bytes:
+    """Blank DOCX with no properties set."""
+    from docx import Document
+
+    doc = Document()
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
