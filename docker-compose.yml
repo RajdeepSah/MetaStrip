@@ -1,0 +1,35 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "5001:5000"
+    volumes:
+      # Mount source for hot-reload (gunicorn --reload watches for changes)
+      - ./backend:/app
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - SECRET_KEY=dev-only-change-in-prod
+      - CORS_ORIGINS=http://localhost:3000
+    healthcheck:
+      # python:3.11-slim has no curl; use python instead
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      # Preserve the container's node_modules — don't let the host overlay them
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:5001
+    depends_on:
+      backend:
+        condition: service_healthy
