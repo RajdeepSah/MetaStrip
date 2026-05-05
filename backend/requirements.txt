@@ -4,15 +4,15 @@ flask-cors==4.0.1
 gunicorn==22.0.0
 
 # Metadata engines
-Pillow==10.4.0
+Pillow
 piexif==1.1.3
-pillow-heif==0.16.0
+
 PyExifTool==0.5.6
 pypdf==4.2.0
 python-docx==1.1.2
 
 # MIME detection (requires libmagic system library)
-python-magic==0.4.27
+python-magic-bin
 
 # Cache + rate limiting
 cachetools==5.3.3
