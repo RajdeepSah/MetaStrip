@@ -12,7 +12,7 @@ pypdf==4.2.0
 python-docx==1.1.2
 
 # MIME detection (requires libmagic system library)
-python-magic-bin
+python-magic
 
 # Cache + rate limiting
 cachetools==5.3.3
